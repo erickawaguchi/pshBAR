@@ -1,0 +1,16 @@
+Package: pshBAR
+Type: Package
+Title: Broken Adaptive Ridge for Competing Risks Regression
+Version: 1.0.0
+Author: Eric S. Kawaguchi
+Maintainer: Eric S. Kawaguchi <erickawaguchi@ucla.edu>
+Description: More about what it does (maybe more than one line)
+    Use four spaces when indenting paragraphs within the Description.
+License: GPL (>= 2)
+Encoding: UTF-8
+LazyData: true
+LinkingTo: Rcpp
+Imports: Rcpp,
+    survival
+RoxygenNote: 6.1.0
+Suggests: testthat
