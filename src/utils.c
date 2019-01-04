@@ -168,14 +168,6 @@ double ridge(double z, double l1, double v) {
 }
 
 
-// Matrix vector multiplication
-double matvecmult(double *X, double *y, int n, int j) {
-  int nn = n * j;
-  double val = 0;
-  for (int i = 0; i < n; i++) val += X[nn + i] * y[i];
-  return(val);
-}
-
 // Weighted cross product of y with jth column of x
 double wcrossprod(double *X, double *y, double *w, int n, int j) {
   int nn = n * j;
@@ -290,14 +282,10 @@ SEXP ccd_ridge(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP lambda_,
   //internal storage
   double nullDev; //to store null deviance
   double grad, hess, l1, shift,  si, delta;
-  //double accNum1[n]; //acumulate the foreward numerator (weighted)
-  //double accNum2[n]; //acumulate the foreward numerator (weighted)
-  //double accSum[n]; //accumulate sum over both accNum1 and accNum2
   int converged; //convergence check
-  int i, j, i2, i3; //for loop indices
+  int i, j, i2; //for loop indices
   double tmp1 = 0; //track backward sum for uncensored events risk set
   double tmp2 = 0; //track forward sum for competing risks risk set
-  double tmp3 = 0; //track cumulative sum for gradient
   //end of declaration;
 
   //Start regression
@@ -324,7 +312,6 @@ SEXP ccd_ridge(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP lambda_,
       if (ici[i] != 1) {
         accNum1[i] = 0;
       } else {
-        st[i] += 1;
         accNum1[i] = tmp1;
       }
 
@@ -340,46 +327,83 @@ SEXP ccd_ridge(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP lambda_,
       }
     }
 
-    //Take into account ties
-    for(i = 0; i < n; i++) {
-      i2 = (n - 1) - i;
-      if(ici[i2] == 2 || ici[i2 - 1] != 1 || i2 == 0) continue;
-      if(t2[i2] == t2[i2 - 1]) {
-        accNum1[i2 - 1] = accNum1[i2];
-      }
-    }
 
-    //calculate risk set for denominator
+    //calculate risk set for denominator (adjusted for ties)
     for(i = 0; i < n; i++) {
       if (ici[i] != 1) continue;
       accSum[i] = accNum1[i] + accNum2[i];
     }
 
-    //calculate score and hessian here (currently double loop, can we make this more efficient??)
+    //taking into account ties
     for(i = 0; i < n; i++) {
-      for(i2 = i; i2 < n; i2++) {
-        if(ici[i2] != 1) continue;
-        tmp3 = exp(eta[i]) / accSum[i2];
-        st[i] -= tmp3;
-        w[i] += (tmp3 - pow(tmp3, 2));
-      }
-      if(ici[i] == 2) {
-        for(i3 = 0; i3 < i; i3++) {
-          if(ici[i3] != 1) continue;
-          tmp3 = (exp(eta[i])  * wt[i3] / wt[i]) / accSum[i3];
-          st[i] -= tmp3;
-          w[i] += (tmp3 - pow(tmp3, 2));
-        }
+      i2 = (n - 1) - i;
+      if(ici[i2] == 2 || ici[i2 - 1] != 1 || i2 == 0) continue;
+      if(t2[i2] == t2[i2 - 1]) {
+        accSum[i2 - 1] = accSum[i2];
       }
     }
 
-    //Take into account ties:
+
+    //calculate score and hessian here
+    double tmp1 = 0; tmp2 = 0; //reset temporary vals
+
+    //linear scan for non-competing risks (backwards scan)
+    for(i = n; i > 0; i--) {
+      if(ici[i - 1] == 1) {
+        tmp1 += 1 / accSum[i - 1];
+        tmp2 += 1 / pow(accSum[i - 1], 2);
+        accNum1[i - 1] = tmp1;
+        accNum2[i - 1] = tmp2;
+      } else {
+        accNum1[i - 1] = tmp1;
+        accNum2[i - 1] = tmp2;
+      }
+    }
+
+    //Fix ties here:
     for(i = 0; i < n; i++) {
-      if(ici[i] != 1) continue;
-      if(ici[i + 1] != 1 || i == 0) continue;
+      //only needs to be adjusted consective event times
+      if(ici[i] != 1 || ici[i + 1] != 1 || i == (n - 1)) continue;
       if(t2[i] == t2[i + 1]) {
-        st[i + 1] = st[i];
-        w[i + 1] = w[i];
+        accNum1[i + 1] = accNum1[i];
+        accNum2[i + 1] = accNum2[i];
+      }
+    }
+
+
+    //Store into st and w so we can reuse accNum1 and accNum2
+    for(i = 0; i < n; i++) {
+      st[i] = accNum1[i] * exp(eta[i]);
+      w[i] = accNum2[i] * pow(exp(eta[i]), 2);
+    }
+
+    //Perform linear scan for competing risks
+    tmp1 = 0; tmp2 = 0; //reset tmp vals
+    for(i = 0; i < n; i++) {
+      accNum1[i] = 0;
+      accNum2[i] = 0;
+      if(ici[i] == 1) {
+        tmp1 += wt[i] / accSum[i];
+        tmp2 += pow(wt[i] / accSum[i], 2);
+      }
+      if(ici[i] != 2) continue;
+      accNum1[i] = tmp1;
+      accNum2[i] = tmp2;
+    }
+
+    //Now combine to produce score and hessian
+    for(i = 0; i < n; i++) {
+      //First, update st and w and then get score and hessian
+      st[i] += accNum1[i] * (exp(eta[i]) / wt[i]);
+      w[i] += accNum2[i] * pow(exp(eta[i]) / wt[i], 2);
+    }
+
+    for(i= 0; i < n; i++) {
+      w[i] = (st[i] - w[i]);
+      if(ici[i] != 1) {
+        st[i] = - st[i];
+      } else {
+        st[i] = (1 - st[i]);
       }
     }
 
@@ -548,13 +572,9 @@ SEXP ccd_bar(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP lambda_,
   //internal storage
   double nullDev; //to store null deviance
   double grad, hess, shift, si;
-  //double accNum1[n]; //acumulate the foreward numerator (weighted)
-  //double accNum2[n]; //acumulate the foreward numerator (weighted)
-  //double accSum[n]; //accumulate sum over both accNum1 and accNum2
-  int i, j, i2, i3; //for loop indices
+  int i, j, i2; //for loop indices
   double tmp1 = 0; //track backward sum for uncensored events risk set
   double tmp2 = 0; //track forward sum for competing risks risk set
-  double tmp3 = 0; //track cumulative sum for gradient
   //end of declaration;
   //initialization
 
@@ -614,45 +634,82 @@ SEXP ccd_bar(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP lambda_,
         }
       }
 
-      for(i = 0; i < n; i++) {
-        i2 = (n - 1) - i;
-        if(ici[i2] == 2 || ici[i2 - 1] != 1 || i2 == 0) continue;
-        if(t2[i2] == t2[i2 - 1]) {
-          accNum1[i2 - 1] = accNum1[i2];
-        }
-      }
-
       //calculate risk set for denominator
       for(i = 0; i < n; i++) {
         if (ici[i] != 1) continue;
         accSum[i] = accNum1[i] + accNum2[i];
       }
 
-      //calculate score and hessian here (currently double loop, can we make this more efficient??)
       for(i = 0; i < n; i++) {
-        for(i2 = i; i2 < n; i2++) {
-          if(ici[i2] != 1) continue;
-          tmp3 = exp(eta[i]) / accSum[i2];
-          st[i] -= tmp3;
-          w[i] += (tmp3 - pow(tmp3, 2));
-        }
-        if(ici[i] == 2) {
-          for(i3 = 0; i3 < i; i3++) {
-            if(ici[i3] != 1) continue;
-            tmp3 = (exp(eta[i])  * wt[i3] / wt[i]) / accSum[i3];
-            st[i] -= tmp3;
-            w[i] += (tmp3 - pow(tmp3, 2));
-          }
+        i2 = (n - 1) - i;
+        if(ici[i2] == 2 || ici[i2 - 1] != 1 || i2 == 0) continue;
+        if(t2[i2] == t2[i2 - 1]) {
+          accSum[i2 - 1] = accSum[i2];
         }
       }
 
-      //Take into account ties:
+
+
+      //calculate score and hessian here
+      tmp1 = 0; tmp2 = 0; //reset temporary vals
+
+      //linear scan for non-competing risks (backwards scan)
+      for(i = n; i > 0; i--) {
+        if(ici[i - 1] == 1) {
+          tmp1 += 1 / accSum[i - 1];
+          tmp2 += 1 / pow(accSum[i - 1], 2);
+          accNum1[i - 1] = tmp1;
+          accNum2[i - 1] = tmp2;
+        } else if (ici[i - 1] != 1) {
+          accNum1[i - 1] = tmp1;
+          accNum2[i - 1] = tmp2;
+        }
+      }
+
+      //Fix ties here:
       for(i = 0; i < n; i++) {
-        if(ici[i] != 1) continue;
-        if(ici[i + 1] != 1 || i == 0) continue;
+        //only needs to be adjusted consective event times
+        if(ici[i] != 1 || ici[i + 1] != 1 || i == (n - 1)) continue;
         if(t2[i] == t2[i + 1]) {
-          st[i + 1] = st[i];
-          w[i + 1] = w[i];
+          accNum1[i + 1] = accNum1[i];
+          accNum2[i + 1] = accNum2[i];
+        }
+      }
+
+
+      //Store into st and w so we can reuse accNum1 and accNum2
+      for(i = 0; i < n; i++) {
+        st[i] = accNum1[i] * exp(eta[i]);
+        w[i] = accNum2[i] * pow(exp(eta[i]), 2);
+      }
+
+      //Perform linear scan for competing risks
+      tmp1 = 0; tmp2 = 0; //reset tmp vals
+      for(i = 0; i < n; i++) {
+        accNum1[i] = 0;
+        accNum2[i] = 0;
+        if(ici[i] == 1) {
+          tmp1 += wt[i] / accSum[i];
+          tmp2 += pow(wt[i] / accSum[i], 2);
+        }
+        if(ici[i] != 2) continue;
+        accNum1[i] = tmp1;
+        accNum2[i] = tmp2;
+      }
+
+      //Now combine to produce score and hessian
+      for(i = 0; i < n; i++) {
+        //First, update st and w and then get score and hessian
+        st[i] += accNum1[i] * (exp(eta[i]) / wt[i]);
+        w[i] += accNum2[i] * pow(exp(eta[i]) / wt[i], 2);
+      }
+
+      for(i= 0; i < n; i++) {
+        w[i] = (st[i] - w[i]);
+        if(ici[i] != 1) {
+          st[i] = - st[i];
+        } else {
+          st[i] = (1 - st[i]);
         }
       }
       //end calculation of score and hessian

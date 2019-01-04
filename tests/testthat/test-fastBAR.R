@@ -1,3 +1,5 @@
+library("testthat")
+
 test_that("pshBARL0 and pshBAR yield similar estimates for small sample sizes (up to 1E-5)", {
   set.seed(2019)
   ftime   <- rexp(50)
@@ -10,3 +12,4 @@ test_that("pshBARL0 and pshBAR yield similar estimates for small sample sizes (u
   b <- pshBARL0(ftime, fstatus, cov, lambda = lambda, xi = xi)
   expect_equal(a$coef, b$coef, tolerance = 1E-5)
 })
+

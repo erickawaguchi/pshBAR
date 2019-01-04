@@ -1,3 +1,5 @@
+library("testthat")
+
 test_that("pshBAR throws error for negative value of xi", {
   set.seed(10)
   ftime   <- rexp(50)
