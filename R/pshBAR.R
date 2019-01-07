@@ -155,7 +155,7 @@ pshBAR <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
                         ridgeCoef = ridgeCoef,
                         xi = xi,
                         call = sys.call()),
-                        class = "crrBAR")
+                        class = "pshBAR")
 
   val
 }
