@@ -462,7 +462,7 @@ int checkFastBarConvergence(double *beta, double *beta_old, double eps, int l, i
   return(converged);
 }
 
-SEXP cleanupNewCRR(double *a, double *e,  double *eta, double *st, double *w, double *accNum1, double *accNum2, double *accSum,
+SEXP cleanupNewCRR(double *a, double *e,  double *eta, double *st, double *w, double *diffBeta, double *accNum1, double *accNum2, double *accSum,
                    SEXP beta, SEXP Dev, SEXP iter, SEXP residuals, SEXP score, SEXP hessian, SEXP linpred, SEXP converged) {
   // Free up all intermediate step variables
   Free(a);
@@ -470,6 +470,7 @@ SEXP cleanupNewCRR(double *a, double *e,  double *eta, double *st, double *w, do
   Free(eta);
   Free(st);
   Free(w);
+  Free(diffBeta);
   Free(accNum1);
   Free(accNum2);
   Free(accSum);
@@ -750,6 +751,6 @@ SEXP ccd_bar(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP lambda_,
     } //BAR iterate for l^th lambda
   } // Cycle through all lambda
 
-  res = cleanupNewCRR(a, e, eta, st, w, accNum1, accNum2, accSum, beta, Dev, iter, residuals, score, hessian, linpred, converged);
+  res = cleanupNewCRR(a, e, eta, st, w, diffBeta, accNum1, accNum2, accSum, beta, Dev, iter, residuals, score, hessian, linpred, converged);
   return(res);
 }
