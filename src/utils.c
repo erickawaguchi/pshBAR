@@ -147,6 +147,127 @@ SEXP evalLogLikelihood(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP beta_) {
   return(ScalarReal(loglik));
 }
 
+//Get score and hessian for finding lambda values:
+void getScoreAndHessian (double *t2, int *ici, int *nin, double *wt, double *eta, double *st, double *w, double *r)
+{
+
+  const int n = nin[0];
+  int i, i2; //for loop indices
+  double tmp1 = 0; //track backward sum for uncensored events risk set
+  double tmp2 = 0; //track forward sum for competing risks risk set
+  //end of declaration;
+
+  double *accNum1 = Calloc(n, double); //accumulate the backwards numerator
+  for (int i = 0; i < n; i++) accNum1[i] = 0;
+  double *accNum2 = Calloc(n, double); //acumulate the foreward numerator (weighted)
+  for (int i = 0; i < n; i++) accNum2[i] = 0;
+  double *accSum = Calloc(n, double); //accumulate sum over both accNum1 and accNum2
+  for (int i = 0; i < n; i++) accSum[i] = 0;
+  //initialization
+
+  //Backward Scan [O(n)]
+  for (i = 0; i < n; i++){
+    st[i] = 0;
+    w[i] = 0;
+    r[i] = 0;
+    tmp1 += exp(eta[i]); //track cumulative sum over 1:n
+    if (ici[i] != 1) {
+      // if subject is not an event then accNum[i] = 0;
+      accSum[i] = 0;
+    } else {
+      accSum[i] = tmp1;
+    }
+  }
+
+  //Forward Scan (To take into account the competing risks component) [O(n)]
+  for(i2 = (n - 1); i2 >= 0; i2--) {
+    if (ici[i2] == 2) {
+      tmp2 += exp(eta[i2]) / wt[i2];
+    }
+    if (ici[i2] != 1) continue;
+    accSum[i2] += wt[i2] * tmp2;
+  }
+
+
+  //taking into account ties [O(n)]
+  for(i2 = (n - 1); i2 >= 0; i2--) {
+    if(ici[i2] == 2 || ici[i2 - 1] != 1 || i2 == 0) continue;
+    if(t2[i2] == t2[i2 - 1]) {
+      accSum[i2 - 1] = accSum[i2];
+    }
+  }
+
+
+  //calculate score and hessian here
+  tmp1 = 0; tmp2 = 0; //reset temporary vals
+
+  //linear scan for non-competing risks (backwards scan)
+  for(i = (n - 1); i >= 0; i--) {
+    if(ici[i] == 1) {
+      tmp1 += 1 / accSum[i];
+      tmp2 += 1 / pow(accSum[i], 2);
+      accNum1[i] = tmp1;
+      accNum2[i] = tmp2;
+    } else {
+      accNum1[i] = tmp1;
+      accNum2[i] = tmp2;
+    }
+  }
+
+  //Fix ties here:
+  for(i = 0; i < n; i++) {
+    //only needs to be adjusted consective event times
+    if(ici[i] != 1 || ici[i + 1] != 1 || i == (n - 1)) continue;
+    if(t2[i] == t2[i + 1]) {
+      accNum1[i + 1] = accNum1[i];
+      accNum2[i + 1] = accNum2[i];
+    }
+  }
+
+
+  //Store into st and w so we can reuse accNum1 and accNum2
+  for(i = 0; i < n; i++) {
+    st[i] = accNum1[i] * exp(eta[i]);
+    w[i] = accNum2[i] * pow(exp(eta[i]), 2);
+  }
+
+  //Perform linear scan for competing risks
+  tmp1 = 0; tmp2 = 0; //reset tmp vals
+  for(i = 0; i < n; i++) {
+    accNum1[i] = 0;
+    accNum2[i] = 0;
+    if(ici[i] == 1) {
+      tmp1 += wt[i] / accSum[i];
+      tmp2 += pow(wt[i] / accSum[i], 2);
+    }
+    if(ici[i] != 2) continue;
+    accNum1[i] = tmp1;
+    accNum2[i] = tmp2;
+  }
+
+  //Now combine to produce score and hessian
+  for(i = 0; i < n; i++) {
+    //First, update st and w and then get score and hessian
+    st[i] += accNum1[i] * (exp(eta[i]) / wt[i]);
+    w[i] += accNum2[i] * pow(exp(eta[i]) / wt[i], 2);
+  }
+
+  for(i= 0; i < n; i++) {
+    w[i] = (st[i] - w[i]);
+    if(ici[i] != 1) {
+      st[i] = - st[i];
+    } else {
+      st[i] = (1 - st[i]);
+    }
+    if (w[i] == 0) r[i] = 0;
+    else r[i] = st[i] / w[i];
+  }
+
+  free(accNum1);
+  free(accNum2);
+  free(accSum);
+}
+
 
 // Criterion for convergence: All coefficients must pass the following |(b_new - b_old) / b_old| < eps
 int checkConvergence(double *beta, double *beta_old, double eps, int p) {
@@ -408,9 +529,9 @@ SEXP ccd_ridge(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP lambda_,
 
     // calculate xwr and xwx & update beta_j
     for (j = 0; j < p; j++) {
-      grad = -wcrossprod(x, r, w, n, j); // jth component of gradient [l'(b)]
-      hess = wsqsum(x, w, n, j); // jth component of hessian [l''(b)]
-      l1 = lam * m[j]; //divide by n since we are minimizing the following: -(1/n)l(beta) + lambda * p(beta)
+      grad = -wcrossprod(x, r, w, n, j) / n; // jth component of gradient [l'(b)]
+      hess = wsqsum(x, w, n, j) / n; // jth component of hessian [l''(b)]
+      l1 = lam * m[j] / n; //divide by n since we are minimizing the following: -(1/n)l(beta) + lambda * p(beta)
       delta = -(grad + a[j] * l1) / (hess + l1);
 
       // Do one dimensional ridge update.
@@ -717,10 +838,10 @@ SEXP ccd_bar(SEXP x_, SEXP t2_, SEXP ici_, SEXP wt_, SEXP lambda_,
       // calculate xwr and xwx & update beta_j
       for (j = 0; j < p; j++) {
 
-        grad = wcrossprod(x, r, w, n, j); // jth component of gradient
-        hess = wsqsum(x, w, n, j); // jth component of hessian [l''(b)]
+        grad = wcrossprod(x, r, w, n, j) / n; // jth component of gradient
+        hess = wsqsum(x, w, n, j) / n; // jth component of hessian [l''(b)]
         //New beta_j update
-        b[l * p + j] = newBarL0(hess, grad, a[j], lam[l]);
+        b[l * p + j] = newBarL0(hess, grad, a[j], lam[l] / n);
 
         // Update r
         shift = b[l * p + j] - a[j];

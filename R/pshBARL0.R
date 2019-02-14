@@ -36,9 +36,11 @@
 #' Fine J. and Gray R. (1999) A proportional hazards model for the subdistribution of a competing risk.  \emph{JASA} 94:496-509.
 
 pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
-                   lambda = 0, xi = 0,
+                   lambda, xi = 0,
                    eps = 1E-6,
-                   max.iter = 1000){
+                   max.iter = 1000,
+                   lambda.min.ratio = 0.001,
+                   nlambda = 25){
 
   ## Error checking
   if(xi < 0) stop("xi must be a non-negative number.")
@@ -74,11 +76,23 @@ pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
 
   # If lambda is MISSING, create lambda path
   if(missing(lambda)) {
-    stop("Lambda must be a non-negtive number or vector of non-negative numbers.")
+    if(lambda.min.ratio <= 0 | lambda.min.ratio >= 1) stop("lambda.min.ratio must be a non-negative number between 0 and 1")
+    if(nlambda <= 0) stop("nlambda must be a non-negative integer")
+
+    gradHess <- .C("getScoreAndHessian", as.double(ftime), as.integer(fstatus),
+                   as.integer(n), as.double(uuu),
+                   as.double(rep(0, n)), double(n), double(n), double(n),
+                   PACKAGE = "pshBAR")
+    w0 <- gradHess[[7]]
+    r0 <- gradHess[[8]]
+    l.max <- max(t(w0 * r0) %*% XX)
+    l.min <- lambda.min.ratio
+    lambda = exp(seq(log(l.max), log(l.min * l.max), len = nlambda))
+    lambda = sort(lambda, decreasing = TRUE)
   } else if(min(lambda) < 0) {
     stop("lambda must be a non-negative number.")
   } else {
-    if(is.unsorted(lambda)) sort(lambda)
+    lambda <- sort(lambda, decreasing = TRUE)
   }
 
    nlam <- length(lambda)
