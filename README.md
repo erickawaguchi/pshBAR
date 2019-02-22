@@ -1,6 +1,6 @@
 # pshBAR
 
-Broken Adaptive Ridge (BAR) regression for Competing Risks Regression.
+Broken Adaptive Ridge (BAR) regression for competing risks data.
 
 Introduction
 ============
