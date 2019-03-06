@@ -38,14 +38,13 @@
 pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
                    lambda, xi = 0,
                    eps = 1E-6,
-                   max.iter = 1000,
-                   lambda.min.ratio = 0.001,
-                   nlambda = 25){
+                   max.iter = 1000){
 
   ## Error checking
   if(xi < 0) stop("xi must be a non-negative number.")
   if(max.iter < 1) stop("max.iter must be positive integer.")
   if(eps <= 0) stop("eps must be a positive number.")
+
   # Sort time
   n <- length(ftime)
   p <- ncol(X)
@@ -78,17 +77,6 @@ pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
   if(missing(lambda)) {
     if(lambda.min.ratio <= 0 | lambda.min.ratio >= 1) stop("lambda.min.ratio must be a non-negative number between 0 and 1")
     if(nlambda <= 0) stop("nlambda must be a non-negative integer")
-
-    gradHess <- .C("getScoreAndHessian", as.double(ftime), as.integer(fstatus),
-                   as.integer(n), as.double(uuu),
-                   as.double(rep(0, n)), double(n), double(n), double(n),
-                   PACKAGE = "pshBAR")
-    w0 <- gradHess[[7]]
-    r0 <- gradHess[[8]]
-    l.max <- max(t(w0 * r0) %*% XX)
-    l.min <- lambda.min.ratio
-    lambda = exp(seq(log(l.max), log(l.min * l.max), len = nlambda))
-    lambda = sort(lambda, decreasing = TRUE)
   } else if(min(lambda) < 0) {
     stop("lambda must be a non-negative number.")
   } else {
@@ -101,11 +89,11 @@ pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
   ridgeFit   <- .Call("ccd_ridge", XX, as.numeric(ftime), as.integer(fstatus), uuu,
                       xi, eps, as.integer(max.iter),
                       penalty.factor = rep(1, p), PACKAGE = "pshBAR")
-  ridgeCoef  <- ridgeFit[[1]] / scale #Divide coeff estimates by sdev
   ridgeIter  <- ridgeFit[[3]]
 
-  #Enter BAR Fit here (for different lambdas) keep everything in terms of standardized coefficients
+  #Enter BAR fit here
   btmp <- ridgeFit[[1]]
+
   barFit <- .Call("ccd_bar", XX, as.numeric(ftime), as.integer(fstatus), uuu,
                       as.vector(lambda), as.double(eps), as.integer(max.iter),
                       as.vector(btmp), PACKAGE = "pshBAR")
@@ -125,7 +113,7 @@ pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
                         iter = iter,
                         lambda = lambda,
                         converged = conv,
-                        ridgeCoef = ridgeCoef,
+                        ridgeCoef = btmp / scale,
                         xi = xi,
                         call = sys.call()),
                    class = "pshBAR")
