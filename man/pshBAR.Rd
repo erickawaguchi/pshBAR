@@ -59,7 +59,7 @@ ftime <- rexp(200)
 fstatus <- sample(0:2, 200, replace = TRUE)
 cov <- matrix(runif(1000), nrow = 200)
 dimnames(cov)[[2]] <- c('x1','x2','x3','x4','x5')
-fit <- pshBAR(ftime, fstatus, cov, lambda = log(sum(fstatus == 1)) / 2, xi = 1 / 2)
+fit <- pshBAR(ftime, fstatus, cov, lambda = log(5) / 2, xi = log(5))
 fit$coef
 }
 \references{

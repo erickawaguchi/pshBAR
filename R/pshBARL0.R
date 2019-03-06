@@ -36,7 +36,7 @@
 #' Fine J. and Gray R. (1999) A proportional hazards model for the subdistribution of a competing risk.  \emph{JASA} 94:496-509.
 
 pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
-                   lambda = 0, xi = 0,
+                   lambda, xi = 0,
                    eps = 1E-6,
                    max.iter = 1000){
 
@@ -44,6 +44,7 @@ pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
   if(xi < 0) stop("xi must be a non-negative number.")
   if(max.iter < 1) stop("max.iter must be positive integer.")
   if(eps <= 0) stop("eps must be a positive number.")
+
   # Sort time
   n <- length(ftime)
   p <- ncol(X)
@@ -74,11 +75,12 @@ pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
 
   # If lambda is MISSING, create lambda path
   if(missing(lambda)) {
-    stop("Lambda must be a non-negtive number or vector of non-negative numbers.")
+    if(lambda.min.ratio <= 0 | lambda.min.ratio >= 1) stop("lambda.min.ratio must be a non-negative number between 0 and 1")
+    if(nlambda <= 0) stop("nlambda must be a non-negative integer")
   } else if(min(lambda) < 0) {
     stop("lambda must be a non-negative number.")
   } else {
-    if(is.unsorted(lambda)) sort(lambda)
+    lambda <- sort(lambda, decreasing = TRUE)
   }
 
    nlam <- length(lambda)
@@ -87,11 +89,11 @@ pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
   ridgeFit   <- .Call("ccd_ridge", XX, as.numeric(ftime), as.integer(fstatus), uuu,
                       xi, eps, as.integer(max.iter),
                       penalty.factor = rep(1, p), PACKAGE = "pshBAR")
-  ridgeCoef  <- ridgeFit[[1]] / scale #Divide coeff estimates by sdev
   ridgeIter  <- ridgeFit[[3]]
 
-  #Enter BAR Fit here (for different lambdas) keep everything in terms of standardized coefficients
+  #Enter BAR fit here
   btmp <- ridgeFit[[1]]
+
   barFit <- .Call("ccd_bar", XX, as.numeric(ftime), as.integer(fstatus), uuu,
                       as.vector(lambda), as.double(eps), as.integer(max.iter),
                       as.vector(btmp), PACKAGE = "pshBAR")
@@ -111,7 +113,7 @@ pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
                         iter = iter,
                         lambda = lambda,
                         converged = conv,
-                        ridgeCoef = ridgeCoef,
+                        ridgeCoef = btmp / scale,
                         xi = xi,
                         call = sys.call()),
                    class = "pshBAR")

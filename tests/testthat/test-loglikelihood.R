@@ -1,3 +1,5 @@
+library(cmprsk)
+library(testthat)
 test_that("getLogLikelihood returns same NULL likelihood as crr", {
   set.seed(10)
   ftime   <- rexp(50)

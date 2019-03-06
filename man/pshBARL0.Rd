@@ -5,8 +5,7 @@
 \title{Efficient L0-BAR for the Fine-Gray Model via Coordinate-Wise Algorithm}
 \usage{
 pshBARL0(ftime, fstatus, X, failcode = 1, cencode = 0, lambda = 0,
-  xi = 0, delta = 0, eps = 1e-06, lam.min = ifelse(dim(X)[1] >
-  dim(X)[2], 0.001, 0.05), nlambda = 25, log = TRUE, max.iter = 1000)
+  xi = 0, eps = 1e-06, max.iter = 1000)
 }
 \arguments{
 \item{ftime}{A vector of event/censoring times.}
@@ -24,12 +23,6 @@ pshBARL0(ftime, fstatus, X, failcode = 1, cencode = 0, lambda = 0,
 \item{xi}{Numeric: tuning parameter for initial ridge regression}
 
 \item{eps}{Numeric: algorithm stops when the relative change in any coefficient is less than \code{eps} (default is \code{1E-6})}
-
-\item{lam.min}{Numeric: smallest value of lambda if performing grid search}
-
-\item{nlambda}{Numeric: number of \code{lambda} values if performing grid search  (default is 25)}
-
-\item{log}{Logical: Whether or not the grid search is log10 spaced (default is \code{TRUE})}
 
 \item{max.iter}{Numeric: maximum iterations to achieve convergence (default is 1000)}
 }
@@ -53,7 +46,7 @@ ftime <- rexp(200)
 fstatus <- sample(0:2, 200, replace = TRUE)
 cov <- matrix(runif(1000), nrow = 200)
 dimnames(cov)[[2]] <- c('x1','x2','x3','x4','x5')
-fit <- pshBARL0(ftime, fstatus, cov, lambda = log(sum(fstatus == 1)) / 2, xi = 1 / 2)
+fit <- pshBARL0(ftime, fstatus, cov, lambda = log(5), / 2, xi = log(5))
 fit$coef
 }
 \references{
