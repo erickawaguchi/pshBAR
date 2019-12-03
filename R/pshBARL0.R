@@ -20,7 +20,7 @@
 #' Fixing \code{lambda} to 0 and specifying \code{xi} will result in a ridge regression solution.
 #' @return Returns a list of class \code{pshBAR}.
 #'
-#' @import survival cmprsk
+#' @import survival
 #' @export
 #' @useDynLib pshBAR standardize
 #' @examples
@@ -36,7 +36,7 @@
 #' Fine J. and Gray R. (1999) A proportional hazards model for the subdistribution of a competing risk.  \emph{JASA} 94:496-509.
 
 pshBARL0 <- function(ftime, fstatus, X, failcode = 1, cencode = 0,
-                   lambda, xi = 0,
+                   lambda = 0, xi = 0,
                    eps = 1E-6,
                    max.iter = 1000){
 
