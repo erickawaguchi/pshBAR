@@ -33,7 +33,7 @@ ftime <- rexp(200)
 fstatus <- sample(0:2, 200, replace = TRUE)
 cov <- matrix(runif(1000), nrow = 200)
 dimnames(cov)[[2]] <- c('x1','x2','x3','x4','x5')
-fit <- crr(ftime, fstatus, cov)
+# fit <- crr(ftime, fstatus, cov) # crr does not work in R 3.6.0 as of 12/03/2019
 fit$loglik
 getLogLikelihood(ftime, fstatus, cov, beta = fit$coef)
 }
