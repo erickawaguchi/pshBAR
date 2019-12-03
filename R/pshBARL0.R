@@ -20,7 +20,7 @@
 #' Fixing \code{lambda} to 0 and specifying \code{xi} will result in a ridge regression solution.
 #' @return Returns a list of class \code{pshBAR}.
 #'
-#' @import survival cmprsk
+#' @import survival
 #' @export
 #' @useDynLib pshBAR standardize
 #' @examples
